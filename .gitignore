@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# uv / venv
+.venv/
+
+# tooling caches
+.pytest_cache/
+.ruff_cache/
+
+# evalgate local state
+.evalgate/

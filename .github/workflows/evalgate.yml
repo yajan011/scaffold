@@ -1,0 +1,21 @@
+name: evalgate
+
+# Placeholder CI workflow. Once `evalgate gate` is implemented this will run it
+# on pull requests so a quality regression blocks the merge.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Sync
+        run: uv sync
+      # - name: Gate
+      #   env:
+      #     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      #   run: uv run evalgate gate
