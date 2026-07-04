@@ -7,9 +7,12 @@ them (ingest, replay, scorers, diff).
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
+import yaml
 from pydantic import BaseModel, Field
 
 
@@ -52,11 +55,43 @@ class Case(BaseModel):
     reference: CaseReference = Field(default_factory=CaseReference)
     metadata: CaseMetadata = Field(default_factory=CaseMetadata)
 
+    @staticmethod
+    def make_id(source_trace_id: str) -> str:
+        """Derive a stable, deterministic Case id from a source trace id.
+
+        The same ``source_trace_id`` always yields the same id, and distinct
+        inputs yield distinct ids (collision probability is that of the
+        truncated SHA-256 digest). This lets re-ingesting the same trace update
+        an existing Case in place rather than creating a duplicate.
+        """
+        digest = hashlib.sha256(source_trace_id.encode("utf-8")).hexdigest()
+        return f"case-{digest[:16]}"
+
+    def to_yaml(self) -> str:
+        """Serialize this Case to a YAML string that round-trips via :meth:`from_yaml`."""
+        return yaml.safe_dump(
+            self.model_dump(mode="json"),
+            sort_keys=False,
+            allow_unicode=True,
+            default_flow_style=False,
+        )
+
+    @classmethod
+    def from_yaml(cls, text: str) -> Case:
+        """Parse a Case from a YAML string produced by :meth:`to_yaml`."""
+        data = yaml.safe_load(text) or {}
+        return cls.model_validate(data)
+
 
 class Suite(BaseModel):
-    """A collection of Cases loaded from files in the user's repo."""
+    """A collection of Cases loaded from files in the user's repo.
+
+    ``source_paths`` records the files the Cases were loaded from (in load
+    order), so tooling can report where a Case came from or rewrite it in place.
+    """
 
     cases: list[Case] = Field(default_factory=list)
+    source_paths: list[Path] = Field(default_factory=list)
 
 
 class ScorerResult(BaseModel):
@@ -101,3 +136,12 @@ class RunResult(BaseModel):
     created_at: datetime
     case_results: list[CaseResult] = Field(default_factory=list)
     summary: RunSummary = Field(default_factory=RunSummary)
+
+    def to_json(self, *, indent: int | None = 2) -> str:
+        """Serialize this RunResult to JSON that round-trips via :meth:`from_json`."""
+        return self.model_dump_json(indent=indent)
+
+    @classmethod
+    def from_json(cls, text: str | bytes) -> RunResult:
+        """Parse a RunResult from a JSON string produced by :meth:`to_json`."""
+        return cls.model_validate_json(text)
