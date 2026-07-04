@@ -8,10 +8,15 @@ exit non-zero on regression.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import typer
 from rich.console import Console
 
 from evalgate import __version__
+from evalgate.config import DEFAULT_CONFIG_YAML
+from evalgate.ingest.otel import ingest_otel
 
 app = typer.Typer(
     name="evalgate",
@@ -41,9 +46,22 @@ def version() -> None:
 
 
 @app.command()
-def init() -> None:
+def init(
+    force: bool = typer.Option(False, "--force", help="Overwrite an existing evalgate.yaml."),
+) -> None:
     """Scaffold evalgate.yaml and an evals/ directory in the current repo."""
-    _todo("init")
+    config_path = Path("evalgate.yaml")
+    if config_path.exists() and not force:
+        console.print(f"[red]{config_path} already exists.[/] Pass [bold]--force[/] to overwrite.")
+        raise typer.Exit(code=1)
+
+    config_path.write_text(DEFAULT_CONFIG_YAML, encoding="utf-8")
+    evals_dir = Path("evals")
+    evals_dir.mkdir(exist_ok=True)
+
+    console.print(f"[green]Wrote[/] {config_path}")
+    console.print(f"[green]Created[/] {evals_dir}/ (add Case files here)")
+    console.print("Next: [bold]evalgate ingest <trace-file>[/] to build your first cases.")
 
 
 @app.command()
@@ -52,7 +70,27 @@ def ingest(
     out: str = typer.Option("evals/", "--out", help="Directory to write Case files into."),
 ) -> None:
     """Build or update regression Cases from a trace file."""
-    _todo("ingest")
+    trace_path = Path(trace_file)
+    if not trace_path.exists():
+        console.print(f"[red]Trace file not found:[/] {trace_path}")
+        raise typer.Exit(code=1)
+
+    try:
+        result = ingest_otel(trace_path)
+    except json.JSONDecodeError as exc:
+        console.print(f"[red]{trace_path} is not valid JSON:[/] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    out_dir = Path(out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for case in result.cases:
+        (out_dir / f"{case.id}.yaml").write_text(case.to_yaml(), encoding="utf-8")
+
+    console.print(
+        f"[green]Wrote {len(result.cases)} case(s)[/] to {out_dir}"
+        + (f" ({result.skipped} span(s) skipped" if result.skipped else " (0 skipped")
+        + f", {result.total_spans} span(s) seen)."
+    )
 
 
 @app.command()

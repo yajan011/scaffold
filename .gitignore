@@ -16,3 +16,11 @@ dist/
 # evalgate local state
 .evalgate/
 claude.md
+
+# private (do not publish)
+CLAUDE.md
+project.md
+prompts.md
+.env
+.env.*
+.evalgate/
