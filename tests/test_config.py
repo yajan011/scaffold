@@ -1,4 +1,4 @@
-"""Tests for config loading, validation errors, and `evalgate init`.
+"""Tests for config loading, validation errors, and `ankora init`.
 
 No provider calls — API-key resolution is exercised via monkeypatched env only.
 """
@@ -10,8 +10,8 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from evalgate.cli import app
-from evalgate.config import (
+from ankora.cli import app
+from ankora.config import (
     Config,
     ConfigError,
     EmbeddingSimilarityScorerConfig,
@@ -40,12 +40,12 @@ scorers:
     threshold: 0.85
 gate:
   fail_on: regression
-  baseline: .evalgate/baseline.json
+  baseline: .ankora/baseline.json
 """
 
 
 def _write(tmp_path: Path, text: str) -> Path:
-    path = tmp_path / "evalgate.yaml"
+    path = tmp_path / "ankora.yaml"
     path.write_text(text, encoding="utf-8")
     return path
 
@@ -128,7 +128,7 @@ def test_init_writes_parseable_config(tmp_path: Path, monkeypatch: pytest.Monkey
     result = runner.invoke(app, ["init"])
     assert result.exit_code == 0
 
-    config_path = tmp_path / "evalgate.yaml"
+    config_path = tmp_path / "ankora.yaml"
     assert config_path.exists()
     assert (tmp_path / "evals").is_dir()
 
@@ -142,20 +142,20 @@ def test_init_refuses_to_overwrite_without_force(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "evalgate.yaml").write_text("version: 1\n", encoding="utf-8")
+    (tmp_path / "ankora.yaml").write_text("version: 1\n", encoding="utf-8")
 
     result = runner.invoke(app, ["init"])
     assert result.exit_code == 1
     assert "already exists" in result.output
     # Original content preserved.
-    assert (tmp_path / "evalgate.yaml").read_text(encoding="utf-8") == "version: 1\n"
+    assert (tmp_path / "ankora.yaml").read_text(encoding="utf-8") == "version: 1\n"
 
 
 def test_init_force_overwrites(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "evalgate.yaml").write_text("version: 1\n", encoding="utf-8")
+    (tmp_path / "ankora.yaml").write_text("version: 1\n", encoding="utf-8")
 
     result = runner.invoke(app, ["init", "--force"])
     assert result.exit_code == 0
-    config = load_config(tmp_path / "evalgate.yaml")
+    config = load_config(tmp_path / "ankora.yaml")
     assert len(config.scorers) == 2

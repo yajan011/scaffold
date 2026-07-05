@@ -1,0 +1,49 @@
+name: publish
+
+# Publish ankora to PyPI when a GitHub Release is published, using PyPI
+# Trusted Publishing (OIDC). No API tokens are stored in this repository —
+# see RELEASING.md for the one-time PyPI setup.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build sdist + wheel
+        run: uv build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    # The `pypi` environment scopes the OIDC trust and lets you add approvals.
+    environment:
+      name: pypi
+      url: https://pypi.org/project/ankora/
+    permissions:
+      id-token: write # required for Trusted Publishing (OIDC); no tokens needed
+    steps:
+      - name: Download dist artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

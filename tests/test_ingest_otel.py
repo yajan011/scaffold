@@ -10,8 +10,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from evalgate.ingest.otel import IngestResult, ingest_otel
-from evalgate.models import Case
+from ankora.ingest.otel import IngestResult, ingest_otel
+from ankora.models import Case
 
 SAMPLE = Path(__file__).resolve().parents[1] / "examples" / "sample_otel.json"
 
@@ -22,7 +22,7 @@ def _ingest() -> IngestResult:
 
 def test_sample_ingests_two_cases_and_skips_non_gen_ai() -> None:
     result = _ingest()
-    assert result.total_spans == 3
+    assert result.total == 3
     assert result.skipped == 1  # the plain HTTP span
     assert len(result.cases) == 2
 
@@ -111,7 +111,7 @@ def test_gen_ai_span_without_io_is_skipped(tmp_path: Path) -> None:
     path.write_text(json.dumps([span]), encoding="utf-8")
 
     result = ingest_otel(path)
-    assert result.total_spans == 1
+    assert result.total == 1
     assert result.skipped == 1
     assert result.cases == []
 

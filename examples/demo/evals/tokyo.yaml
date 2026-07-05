@@ -1,0 +1,13 @@
+id: tokyo
+input:
+  messages:
+    - role: system
+      content: Repeat the user's message exactly.
+    - role: user
+      content: '{"city": "Tokyo", "country": "Japan"}'
+  params:
+    temperature: 0
+reference:
+  output: '{"city": "Tokyo", "country": "Japan"}'
+metadata:
+  tags: [demo]

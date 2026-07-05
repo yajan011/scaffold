@@ -1,0 +1,78 @@
+{
+  "id": "0af7651916cd43dd8448eb211c80319c",
+  "name": "trip-planner",
+  "timestamp": "2024-07-04T00:00:00Z",
+  "observations": [
+    {
+      "id": "b7ad6b7169203331",
+      "traceId": "0af7651916cd43dd8448eb211c80319c",
+      "type": "GENERATION",
+      "name": "openai-chat",
+      "startTime": "2024-07-04T00:00:00Z",
+      "endTime": "2024-07-04T00:00:00.850Z",
+      "model": "gpt-4o-mini",
+      "modelParameters": {
+        "temperature": 0.0,
+        "top_p": 1.0,
+        "max_tokens": 256
+      },
+      "input": [
+        {
+          "role": "system",
+          "content": "You are a helpful assistant."
+        },
+        {
+          "role": "user",
+          "content": "What is the capital of France?"
+        }
+      ],
+      "output": {
+        "role": "assistant",
+        "content": "The capital of France is Paris."
+      },
+      "usage": {
+        "input": 24,
+        "output": 8
+      }
+    },
+    {
+      "id": "00f067aa0ba902b7",
+      "traceId": "0af7651916cd43dd8448eb211c80319c",
+      "type": "GENERATION",
+      "name": "openai-chat",
+      "startTime": "2024-07-04T00:01:40Z",
+      "endTime": "2024-07-04T00:01:41.100Z",
+      "model": "gpt-4o",
+      "modelParameters": {
+        "temperature": 0.2
+      },
+      "input": [
+        {
+          "role": "user",
+          "content": "What's the weather in Paris today?"
+        }
+      ],
+      "output": {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "call_abc123",
+            "type": "function",
+            "function": {
+              "name": "get_weather",
+              "arguments": "{\"city\": \"Paris\", \"unit\": \"celsius\"}"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "span-http-1",
+      "traceId": "0af7651916cd43dd8448eb211c80319c",
+      "type": "SPAN",
+      "name": "http.request",
+      "startTime": "2024-07-04T00:00:30Z"
+    }
+  ]
+}

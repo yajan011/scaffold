@@ -9,15 +9,15 @@ from __future__ import annotations
 
 from typer.testing import CliRunner
 
-from evalgate.cli import app
+from ankora.cli import app
 
 runner = CliRunner()
 
 
 def test_package_imports() -> None:
-    import evalgate
+    import ankora
 
-    assert evalgate.__version__
+    assert ankora.__version__
 
 
 def test_help_lists_all_subcommands() -> None:

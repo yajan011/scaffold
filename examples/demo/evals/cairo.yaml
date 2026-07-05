@@ -1,0 +1,13 @@
+id: cairo
+input:
+  messages:
+    - role: system
+      content: Repeat the user's message exactly.
+    - role: user
+      content: '{"city": "Cairo", "country": "Egypt"}'
+  params:
+    temperature: 0
+reference:
+  output: '{"city": "Cairo", "country": "Egypt"}'
+metadata:
+  tags: [demo]

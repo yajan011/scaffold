@@ -1,0 +1,13 @@
+id: paris
+input:
+  messages:
+    - role: system
+      content: Repeat the user's message exactly.
+    - role: user
+      content: '{"city": "Paris", "country": "France"}'
+  params:
+    temperature: 0
+reference:
+  output: '{"city": "Paris", "country": "France"}'
+metadata:
+  tags: [demo]

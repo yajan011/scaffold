@@ -1,0 +1,34 @@
+name: "ankora gate"
+description: >
+  Replay your eval suite and fail the build if quality regressed against the
+  baseline. Provider API keys are read from the environment (pass them via
+  `env:` from repo secrets for real, non-deterministic replays).
+
+inputs:
+  config:
+    description: "Path to ankora.yaml"
+    required: false
+    default: "ankora.yaml"
+  working-directory:
+    description: "Directory to run ankora in"
+    required: false
+    default: "."
+  version:
+    description: "ankora version/spec to install with `uv tool install`"
+    required: false
+    default: "ankora"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+
+    - name: Install ankora
+      shell: bash
+      run: uv tool install "${{ inputs.version }}"
+
+    - name: Run ankora gate
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: ankora gate --config "${{ inputs.config }}"

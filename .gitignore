@@ -13,8 +13,8 @@ dist/
 .pytest_cache/
 .ruff_cache/
 
-# evalgate local state
-.evalgate/
+# ankora local state
+.ankora/
 claude.md
 
 # private (do not publish)
@@ -23,4 +23,4 @@ project.md
 prompts.md
 .env
 .env.*
-.evalgate/
+.ankora/

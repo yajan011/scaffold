@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from evalgate.models import (
+from ankora.models import (
     Case,
     CaseInput,
     CaseMetadata,

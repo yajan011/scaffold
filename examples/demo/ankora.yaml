@@ -1,0 +1,33 @@
+version: 1
+suites: ["evals/**/*.yaml"]
+
+# The `echo` provider is deterministic, offline, and needs no API key — it
+# returns the last user message verbatim. This lets the whole ingest -> run ->
+# gate loop run in CI with no network and no secrets. Swap `provider` to
+# `openai`/`anthropic` (and configure `providers`) for a real replay.
+target:
+  provider: echo
+  model: echo
+
+providers: {}
+
+# Only deterministic scorers, so no judge/embedding model (and no keys) needed.
+scorers:
+  - type: exact
+    threshold: 1.0
+  - type: regex
+    pattern: '"country"'
+    threshold: 1.0
+  - type: json_schema
+    threshold: 1.0
+    schema:
+      type: object
+      required: [city, country]
+      properties:
+        city: {type: string}
+        country: {type: string}
+      additionalProperties: false
+
+gate:
+  fail_on: regression
+  baseline: .ankora/baseline.json

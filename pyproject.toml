@@ -1,12 +1,23 @@
 [project]
-name = "evalgate"
-version = "0.0.1"
+name = "ankora"
+version = "0.1.0"
 description = "Local-first, CI-native regression testing for LLM and agent applications."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
-authors = [{ name = "evalgate contributors" }]
+authors = [{ name = "ankora contributors" }]
 keywords = ["llm", "evaluation", "regression-testing", "ci", "otel", "genai"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing",
+    "Topic :: Software Development :: Quality Assurance",
+]
 dependencies = [
     "typer>=0.12",
     "pydantic>=2",
@@ -18,11 +29,11 @@ dependencies = [
 ]
 
 [project.scripts]
-evalgate = "evalgate.cli:app"
+ankora = "ankora.cli:app"
 
 [project.urls]
-Homepage = "https://github.com/evalgate/evalgate"
-Repository = "https://github.com/evalgate/evalgate"
+Homepage = "https://github.com/ankora/ankora"
+Repository = "https://github.com/ankora/ankora"
 
 [dependency-groups]
 dev = [
@@ -35,7 +46,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/evalgate"]
+packages = ["src/ankora"]
 
 [tool.ruff]
 line-length = 100
@@ -53,7 +64,7 @@ select = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["evalgate"]
+known-first-party = ["ankora"]
 
 [tool.ruff.lint.flake8-bugbear]
 # typer relies on function calls (Option/Argument) in parameter defaults.
