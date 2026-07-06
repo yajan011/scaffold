@@ -116,6 +116,58 @@ gate:
 
 ---
 
+## OpenAI-compatible endpoints
+
+The `openai` provider can talk to any OpenAI-compatible endpoint — Google Gemini's
+OpenAI-compat API, OpenRouter, Groq, Together, or a local Ollama / LM Studio
+server — by setting `base_url` on the provider. Leave it unset to hit
+`api.openai.com` as usual. Keys are still read from the env var you name; ankora
+never sees or stores them.
+
+**Gemini (free tier)** — get a key from [Google AI Studio](https://aistudio.google.com/apikey):
+
+```yaml
+target:
+  provider: openai
+  model: gemini-2.0-flash
+providers:
+  openai:
+    api_key_env: GEMINI_API_KEY
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+scorers:
+  - type: llm_judge                       # judge over the same endpoint
+    judge: {provider: openai, model: gemini-2.0-flash}
+    rubric: "Score 1 if factually consistent with the reference, else 0."
+    threshold: 0.7
+  - type: exact                           # deterministic, no model needed
+    threshold: 1.0
+```
+
+```bash
+export GEMINI_API_KEY=...   # from Google AI Studio
+ankora run
+```
+
+**OpenRouter** — one key, hundreds of models ([openrouter.ai](https://openrouter.ai/)):
+
+```yaml
+target:
+  provider: openai
+  model: openai/gpt-4o-mini                # any OpenRouter model slug
+providers:
+  openai:
+    api_key_env: OPENROUTER_API_KEY
+    base_url: https://openrouter.ai/api/v1
+```
+
+> **Embeddings caveat:** many OpenAI-compatible endpoints expose only chat
+> completions, not the `/embeddings` route. On those, prefer the `llm_judge` and
+> deterministic (`exact`, `regex`, `json_schema`) scorers; use
+> `embedding_similarity` only against a provider whose endpoint actually serves
+> embeddings.
+
+---
+
 ## Wire it into CI
 
 Add a workflow to your repo that runs `ankora gate` on pull requests. Provider

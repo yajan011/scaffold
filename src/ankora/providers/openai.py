@@ -38,11 +38,18 @@ class OpenAIProvider:
         self.seed = seed
 
     @staticmethod
-    def default_client(api_key: str) -> Any:
-        """Construct a real OpenAI SDK client. Imported lazily to keep import cheap."""
+    def default_client(api_key: str, base_url: str | None = None) -> Any:
+        """Construct a real OpenAI SDK client. Imported lazily to keep import cheap.
+
+        When ``base_url`` is set, the client targets that OpenAI-compatible
+        endpoint; when ``None`` it hits api.openai.com unchanged.
+        """
         import openai
 
-        return openai.OpenAI(api_key=api_key)
+        kwargs: dict[str, Any] = {"api_key": api_key}
+        if base_url:
+            kwargs["base_url"] = base_url
+        return openai.OpenAI(**kwargs)
 
     def complete(self, messages: list[Message], params: dict[str, Any]) -> Completion:
         """Call OpenAI and return a normalized Completion."""

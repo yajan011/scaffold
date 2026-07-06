@@ -29,11 +29,17 @@ class AnthropicProvider:
         self.client = client
 
     @staticmethod
-    def default_client(api_key: str) -> Any:
-        """Construct a real Anthropic SDK client. Imported lazily to keep import cheap."""
+    def default_client(api_key: str, base_url: str | None = None) -> Any:
+        """Construct a real Anthropic SDK client. Imported lazily to keep import cheap.
+
+        ``base_url`` optionally overrides the endpoint; ``None`` uses the default.
+        """
         import anthropic
 
-        return anthropic.Anthropic(api_key=api_key)
+        kwargs: dict[str, Any] = {"api_key": api_key}
+        if base_url:
+            kwargs["base_url"] = base_url
+        return anthropic.Anthropic(**kwargs)
 
     def complete(self, messages: list[Message], params: dict[str, Any]) -> Completion:
         """Call Anthropic and return a normalized Completion."""

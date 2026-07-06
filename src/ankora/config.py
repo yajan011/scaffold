@@ -24,9 +24,16 @@ class ConfigError(Exception):
 
 
 class ProviderConfig(BaseModel):
-    """How to reach a provider (keys read from env, never inlined)."""
+    """How to reach a provider (keys read from env, never inlined).
+
+    ``base_url`` optionally points an OpenAI-compatible provider at a custom
+    endpoint (Gemini's OpenAI-compat API, OpenRouter, Groq, Together, a local
+    Ollama/LM Studio server, ...). When ``None`` the provider's default endpoint
+    is used unchanged.
+    """
 
     api_key_env: str
+    base_url: str | None = None
 
 
 class TargetConfig(BaseModel):

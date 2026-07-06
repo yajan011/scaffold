@@ -44,6 +44,8 @@ def get_provider(
     requires_key = getattr(provider_cls, "requires_key", True)
     if client is None and requires_key:
         api_key = config.resolve_api_key(name)
-        client = provider_cls.default_client(api_key)
+        provider_config = config.providers.get(name)
+        base_url = provider_config.base_url if provider_config else None
+        client = provider_cls.default_client(api_key, base_url=base_url)
 
     return provider_cls(model=resolved_model, client=client)

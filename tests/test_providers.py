@@ -231,8 +231,9 @@ def test_registry_resolves_key_and_builds_client_when_none_injected(
 
     built: dict[str, Any] = {}
 
-    def fake_default_client(api_key: str) -> Any:
+    def fake_default_client(api_key: str, base_url: str | None = None) -> Any:
         built["api_key"] = api_key
+        built["base_url"] = base_url
         return _openai_client()
 
     monkeypatch.setattr(OpenAIProvider, "default_client", staticmethod(fake_default_client))
@@ -242,4 +243,53 @@ def test_registry_resolves_key_and_builds_client_when_none_injected(
     assert isinstance(provider, OpenAIProvider)
     # Key was resolved from the env var and handed to the SDK client, not stored.
     assert built["api_key"] == "sk-test-xyz"
+    assert built["base_url"] is None  # no base_url configured -> default endpoint
     assert not hasattr(provider, "api_key")
+
+
+def _base_url_config(base_url: str | None) -> Config:
+    return Config(
+        target=TargetConfig(provider="openai", model="gpt-4o-mini"),
+        providers={"openai": ProviderConfig(api_key_env="OPENAI_API_KEY", base_url=base_url)},
+    )
+
+
+def test_registry_threads_base_url_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-xyz")
+    seen: dict[str, Any] = {}
+
+    def fake_default_client(api_key: str, base_url: str | None = None) -> Any:
+        seen["base_url"] = base_url
+        return _openai_client()
+
+    monkeypatch.setattr(OpenAIProvider, "default_client", staticmethod(fake_default_client))
+    get_provider(
+        "openai", _base_url_config("https://generativelanguage.googleapis.com/v1beta/openai/")
+    )
+
+    assert seen["base_url"] == "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+
+def test_registry_base_url_is_none_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-xyz")
+    seen: dict[str, Any] = {}
+
+    def fake_default_client(api_key: str, base_url: str | None = None) -> Any:
+        seen["base_url"] = base_url
+        return _openai_client()
+
+    monkeypatch.setattr(OpenAIProvider, "default_client", staticmethod(fake_default_client))
+    get_provider("openai", _base_url_config(None))
+
+    assert seen["base_url"] is None
+
+
+def test_openai_default_client_forwards_base_url_to_real_client() -> None:
+    # Constructs a real openai.OpenAI (no network call) and checks the endpoint.
+    client = OpenAIProvider.default_client("sk-x", base_url="https://openrouter.ai/api/v1")
+    assert "openrouter.ai/api/v1" in str(client.base_url)
+
+
+def test_openai_default_client_defaults_to_openai_when_base_url_none() -> None:
+    client = OpenAIProvider.default_client("sk-x")
+    assert "api.openai.com" in str(client.base_url)
