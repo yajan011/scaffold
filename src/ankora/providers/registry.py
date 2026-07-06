@@ -41,11 +41,15 @@ def get_provider(
         raise ConfigError(f"Unknown provider {name!r}. Known providers: {known}.") from exc
 
     resolved_model = model or config.target.model
+    provider_config = config.providers.get(name)
     requires_key = getattr(provider_cls, "requires_key", True)
     if client is None and requires_key:
         api_key = config.resolve_api_key(name)
-        provider_config = config.providers.get(name)
         base_url = provider_config.base_url if provider_config else None
         client = provider_cls.default_client(api_key, base_url=base_url)
 
-    return provider_cls(model=resolved_model, client=client)
+    kwargs: dict[str, Any] = {"model": resolved_model, "client": client}
+    if provider_cls is OpenAIProvider:
+        # seed is OpenAI-specific and opt-in (ProviderConfig.seed, default None).
+        kwargs["seed"] = provider_config.seed if provider_config else None
+    return provider_cls(**kwargs)

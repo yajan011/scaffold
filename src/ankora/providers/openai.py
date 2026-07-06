@@ -14,7 +14,9 @@ from ankora.providers.base import Completion
 
 # Determinism defaults (see CLAUDE.md "Determinism rules").
 DEFAULT_TEMPERATURE = 0
-DEFAULT_SEED = 0
+# seed is opt-in: many OpenAI-compatible endpoints (e.g. Gemini) reject an
+# unknown "seed" field with a 400, so it is only sent when explicitly configured.
+DEFAULT_SEED = None
 
 # gen_ai.request.* params we forward to the Chat Completions API as-is.
 _PASSTHROUGH_PARAMS = (
@@ -66,14 +68,18 @@ class OpenAIProvider:
         request: dict[str, Any] = {
             "model": params.get("model", self.model),
             "messages": [{"role": m.role, "content": m.content} for m in messages],
+        }
+        # Optional params: send only those with a non-None value. A null is
+        # omitted entirely rather than forwarded (which some endpoints reject).
+        optional: dict[str, Any] = {
             "temperature": params.get("temperature", DEFAULT_TEMPERATURE),
+            "seed": params.get("seed", self.seed),
         }
         for key in _PASSTHROUGH_PARAMS:
-            if params.get(key) is not None:
-                request[key] = params[key]
-        seed = params.get("seed", self.seed)
-        if seed is not None:
-            request["seed"] = seed
+            optional[key] = params.get(key)
+        for key, value in optional.items():
+            if value is not None:
+                request[key] = value
         return request
 
     @staticmethod

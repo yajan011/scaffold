@@ -30,10 +30,14 @@ class ProviderConfig(BaseModel):
     endpoint (Gemini's OpenAI-compat API, OpenRouter, Groq, Together, a local
     Ollama/LM Studio server, ...). When ``None`` the provider's default endpoint
     is used unchanged.
+
+    ``seed`` opts into reproducible OpenAI runs. It is left unset by default
+    because many OpenAI-compatible endpoints reject an unknown ``seed`` field.
     """
 
     api_key_env: str
     base_url: str | None = None
+    seed: int | None = None
 
 
 class TargetConfig(BaseModel):

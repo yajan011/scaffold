@@ -106,9 +106,10 @@ def test_openai_complete_defaults_and_mapping() -> None:
         {"role": "system", "content": "Be terse."},
         {"role": "user", "content": "Capital?"},
     ]
-    # Determinism defaults applied when not specified.
+    # temperature defaults to 0 (widely supported); seed is NOT sent by default
+    # (OpenAI-compatible endpoints like Gemini reject an unknown "seed" field).
     assert sent["temperature"] == 0
-    assert sent["seed"] == 0
+    assert "seed" not in sent
     assert sent["top_p"] == 0.9
 
     assert isinstance(completion, Completion)
@@ -119,7 +120,7 @@ def test_openai_complete_defaults_and_mapping() -> None:
     assert completion.raw is response
 
 
-def test_openai_complete_respects_explicit_temperature_and_seed() -> None:
+def test_openai_seed_sent_when_explicitly_set_in_params() -> None:
     client = _openai_client(_openai_response("ok"))
     provider = OpenAIProvider(model="gpt-4o-mini", client=client)
 
@@ -128,6 +129,33 @@ def test_openai_complete_respects_explicit_temperature_and_seed() -> None:
     sent = client.chat.completions.calls[0]
     assert sent["temperature"] == 0.7
     assert sent["seed"] == 42
+
+
+def test_openai_seed_sent_when_configured_on_provider() -> None:
+    client = _openai_client(_openai_response("ok"))
+    provider = OpenAIProvider(model="gpt-4o-mini", client=client, seed=7)
+
+    provider.complete([Message(role="user", content="hi")], {})
+
+    assert client.chat.completions.calls[0]["seed"] == 7
+
+
+def test_openai_none_valued_params_are_omitted() -> None:
+    client = _openai_client(_openai_response("ok"))
+    provider = OpenAIProvider(model="gpt-4o-mini", client=client)
+
+    # Explicit None values must be dropped, not forwarded as null.
+    provider.complete(
+        [Message(role="user", content="hi")],
+        {"top_p": None, "max_tokens": None, "seed": None},
+    )
+
+    sent = client.chat.completions.calls[0]
+    assert "seed" not in sent
+    assert "top_p" not in sent
+    assert "max_tokens" not in sent
+    # temperature still defaults to 0.
+    assert sent["temperature"] == 0
 
 
 def test_openai_embed() -> None:
@@ -293,3 +321,19 @@ def test_openai_default_client_forwards_base_url_to_real_client() -> None:
 def test_openai_default_client_defaults_to_openai_when_base_url_none() -> None:
     client = OpenAIProvider.default_client("sk-x")
     assert "api.openai.com" in str(client.base_url)
+
+
+def test_registry_threads_seed_from_config() -> None:
+    config = Config(
+        target=TargetConfig(provider="openai", model="gpt-4o-mini"),
+        providers={"openai": ProviderConfig(api_key_env="OPENAI_API_KEY", seed=123)},
+    )
+    provider = get_provider("openai", config, client=_openai_client())
+    assert isinstance(provider, OpenAIProvider)
+    assert provider.seed == 123
+
+
+def test_registry_seed_defaults_to_none() -> None:
+    provider = get_provider("openai", _config(), client=_openai_client())
+    assert isinstance(provider, OpenAIProvider)
+    assert provider.seed is None
