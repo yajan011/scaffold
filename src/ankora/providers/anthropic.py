@@ -11,6 +11,7 @@ from typing import Any
 
 from ankora.models import Message
 from ankora.providers.base import Completion
+from ankora.providers.errors import request_with_retry
 
 # Determinism defaults (see CLAUDE.md "Determinism rules"). Anthropic requires
 # max_tokens and does not accept a seed param.
@@ -44,7 +45,9 @@ class AnthropicProvider:
     def complete(self, messages: list[Message], params: dict[str, Any]) -> Completion:
         """Call Anthropic and return a normalized Completion."""
         request = self._build_request(messages, params)
-        response = self.client.messages.create(**request)
+        response = request_with_retry(
+            lambda: self.client.messages.create(**request), provider=self.name
+        )
         return self._map_response(response)
 
     def embed(self, texts: list[str]) -> list[list[float]]:

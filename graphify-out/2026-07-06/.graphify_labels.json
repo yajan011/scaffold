@@ -21,12 +21,5 @@
   "19": "__init__.py",
   "20": "__init__.py",
   "21": "__init__.py",
-  "22": "ankora",
-  "23": "test_scorers.py",
-  "24": "ProviderError",
-  "25": "Case",
-  "26": "_FakeEmbeddingProvider",
-  "27": "Provider",
-  "28": "_FakeJudgeProvider",
-  "29": "ExactScorer"
+  "22": "ankora"
 }

@@ -11,6 +11,7 @@ from typing import Any
 
 from ankora.models import Message
 from ankora.providers.base import Completion
+from ankora.providers.errors import request_with_retry
 
 # Determinism defaults (see CLAUDE.md "Determinism rules").
 DEFAULT_TEMPERATURE = 0
@@ -56,12 +57,17 @@ class OpenAIProvider:
     def complete(self, messages: list[Message], params: dict[str, Any]) -> Completion:
         """Call OpenAI and return a normalized Completion."""
         request = self._build_request(messages, params)
-        response = self.client.chat.completions.create(**request)
+        response = request_with_retry(
+            lambda: self.client.chat.completions.create(**request), provider=self.name
+        )
         return self._map_response(response)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Return one embedding vector per text via the embeddings endpoint."""
-        response = self.client.embeddings.create(model=self.model, input=texts)
+        response = request_with_retry(
+            lambda: self.client.embeddings.create(model=self.model, input=texts),
+            provider=self.name,
+        )
         return [item.embedding for item in response.data]
 
     def _build_request(self, messages: list[Message], params: dict[str, Any]) -> dict[str, Any]:

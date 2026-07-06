@@ -25,6 +25,7 @@ from ankora.config import (
 from ankora.diff import DiffReport, diff_runs
 from ankora.ingest import ingest_traces
 from ankora.models import RunResult
+from ankora.providers.errors import ProviderError
 from ankora.replay import replay
 from ankora.storage import StorageError, get_baseline, load_run, run_path, set_baseline
 from ankora.suites import SuiteError
@@ -133,7 +134,7 @@ def run(
         if suite:
             config = config.model_copy(update={"suites": list(suite)})
         result = replay(config, target=target, concurrency=concurrency)
-    except (ConfigError, SuiteError) as exc:
+    except (ConfigError, SuiteError, ProviderError) as exc:
         console.print(f"[red]{exc}[/]")
         raise typer.Exit(code=1) from exc
 
@@ -176,7 +177,7 @@ def diff(
     try:
         baseline_run = _resolve_run(baseline)
         current_run = _resolve_run(current)
-    except StorageError as exc:
+    except (StorageError, ProviderError) as exc:
         console.print(f"[red]{exc}[/]")
         raise typer.Exit(code=1) from exc
 
@@ -196,7 +197,7 @@ def gate(
     try:
         config = load_config(config_path)
         current = replay(config, target=target, concurrency=concurrency)
-    except (ConfigError, SuiteError) as exc:
+    except (ConfigError, SuiteError, ProviderError) as exc:
         console.print(f"[red]{exc}[/]")
         raise typer.Exit(code=1) from exc
 

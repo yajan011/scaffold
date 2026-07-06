@@ -22,6 +22,7 @@ from ankora.config import (
     TargetConfig,
 )
 from ankora.models import Case, CaseInput, CaseReference, Message, RunResult, Suite
+from ankora.providers.errors import ProviderRateLimitError
 from ankora.replay import replay
 from ankora.suites import SuiteError, load_suites
 
@@ -159,3 +160,34 @@ def test_cli_run_prints_table_and_saved_path(
     assert result.exit_code == 0
     assert "1/1 passed" in result.output
     assert canned.run_id in result.output
+
+
+def test_load_suites_reports_malformed_yaml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    evals = tmp_path / "evals"
+    evals.mkdir()
+    # Unbalanced brackets -> a YAML parse error, not a stack trace.
+    (evals / "broken.yaml").write_text("id: x\ninput: {messages: [", encoding="utf-8")
+
+    with pytest.raises(SuiteError, match="invalid YAML in"):
+        load_suites(_config())
+
+
+def test_cli_run_reports_provider_error_cleanly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    runner.invoke(app, ["init"])  # valid ankora.yaml
+
+    def boom(config: Config, **kwargs: Any) -> RunResult:
+        raise ProviderRateLimitError("Rate limited by openai (429). Retry in 2s.")
+
+    monkeypatch.setattr("ankora.cli.replay", boom)
+
+    result = runner.invoke(app, ["run"])
+    assert result.exit_code == 1
+    assert "Rate limited by openai (429)" in result.output
+    # Clean exit: only a typer Exit, no leaked provider traceback.
+    assert not isinstance(result.exception, ProviderRateLimitError)

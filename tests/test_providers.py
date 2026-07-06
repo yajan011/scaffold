@@ -15,8 +15,39 @@ from ankora.config import Config, ProviderConfig, TargetConfig
 from ankora.models import Message
 from ankora.providers.anthropic import AnthropicProvider
 from ankora.providers.base import Completion
+from ankora.providers.errors import ProviderError, ProviderRateLimitError
 from ankora.providers.openai import OpenAIProvider
 from ankora.providers.registry import get_provider
+
+
+class _FakeAPIError(Exception):
+    """Mimics an openai/anthropic APIStatusError (has status_code + response)."""
+
+    def __init__(self, status_code: int, retry_after: float | None = None) -> None:
+        super().__init__(f"HTTP {status_code}")
+        self.status_code = status_code
+        if retry_after is not None:
+            self.response = SimpleNamespace(headers={"retry-after": str(retry_after)})
+
+
+def _raising_openai_client(exc_factory: Any, *, succeed_after: int | None = None) -> Any:
+    """OpenAI-shaped client whose chat.completions.create raises exc_factory().
+
+    If ``succeed_after`` is set, the Nth call (1-indexed) returns a real response
+    instead of raising, to exercise retry recovery.
+    """
+    state = {"calls": 0}
+
+    def create(**kwargs: Any) -> Any:
+        state["calls"] += 1
+        if succeed_after is not None and state["calls"] >= succeed_after:
+            message = SimpleNamespace(content="ok", tool_calls=None)
+            return SimpleNamespace(choices=[SimpleNamespace(message=message)], usage=None)
+        raise exc_factory()
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    client._state = state  # type: ignore[attr-defined]
+    return client
 
 
 class _RecordingCreate:
@@ -337,3 +368,74 @@ def test_registry_seed_defaults_to_none() -> None:
     provider = get_provider("openai", _config(), client=_openai_client())
     assert isinstance(provider, OpenAIProvider)
     assert provider.seed is None
+
+
+# --------------------------------------------------------------------------- #
+# Error handling & retries (mocked; no live calls)
+# --------------------------------------------------------------------------- #
+def test_rate_limit_retries_then_raises_clean_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    slept: list[float] = []
+    monkeypatch.setattr("time.sleep", lambda s: slept.append(s))
+    client = _raising_openai_client(lambda: _FakeAPIError(429, retry_after=0.5))
+    provider = OpenAIProvider(model="gpt-4o", client=client)
+
+    with pytest.raises(ProviderRateLimitError) as excinfo:
+        provider.complete([Message(role="user", content="hi")], {})
+
+    assert isinstance(excinfo.value, ProviderError)  # clean type, not a raw SDK error
+    assert "Rate limited" in str(excinfo.value)
+    assert client._state["calls"] == 3  # bounded: max_attempts
+    assert slept == [0.5, 0.5]  # Retry-After respected, 2 sleeps before giving up
+
+
+def test_rate_limit_recovers_after_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    client = _raising_openai_client(lambda: _FakeAPIError(429), succeed_after=2)
+    provider = OpenAIProvider(model="gpt-4o", client=client)
+
+    completion = provider.complete([Message(role="user", content="hi")], {})
+
+    assert completion.text == "ok"
+    assert client._state["calls"] == 2  # failed once, succeeded on retry
+
+
+def test_auth_error_is_clean_and_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    client = _raising_openai_client(lambda: _FakeAPIError(401))
+    provider = OpenAIProvider(model="gpt-4o", client=client)
+
+    with pytest.raises(ProviderError, match="auth failed"):
+        provider.complete([Message(role="user", content="hi")], {})
+    assert client._state["calls"] == 1  # no retry for auth failures
+
+
+def test_bad_request_is_clean(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    client = _raising_openai_client(lambda: _FakeAPIError(400))
+    provider = OpenAIProvider(model="gemini-2.0-flash", client=client)
+
+    with pytest.raises(ProviderError, match="bad request"):
+        provider.complete([Message(role="user", content="hi")], {})
+
+
+def test_anthropic_rate_limit_raises_clean_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("time.sleep", lambda s: None)
+
+    def create(**kwargs: Any) -> Any:
+        raise _FakeAPIError(429)
+
+    client = SimpleNamespace(messages=SimpleNamespace(create=create))
+    provider = AnthropicProvider(model="claude-sonnet-5", client=client)
+
+    with pytest.raises(ProviderRateLimitError, match="Rate limited"):
+        provider.complete([Message(role="user", content="hi")], {})
+
+
+def test_unknown_exception_is_not_masked(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A non-API error (real bug) must propagate unchanged, not become ProviderError.
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    client = _raising_openai_client(lambda: ValueError("boom"))
+    provider = OpenAIProvider(model="gpt-4o", client=client)
+
+    with pytest.raises(ValueError, match="boom"):
+        provider.complete([Message(role="user", content="hi")], {})
