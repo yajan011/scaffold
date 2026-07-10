@@ -1,241 +1,163 @@
 # ankora
 
-**Turn the traces you already capture into regression tests that fail your CI when quality silently drops.**
+<div align="center">
+  <img src="logo.png" alt="ankora Logo" width="200" height="200">
 
-Teams have observability but no tests. ~89% of teams run some form of LLM
-observability, but only ~52% run evals — and quality is the No. 1 blocker to
-shipping LLM features to production. So prompt tweaks, model-version bumps, and
-silent provider changes ship undetected until users complain.
+  <p>
+    <strong>Local-first, CI-native regression testing for LLM and agent applications.</strong>
+  </p>
 
-`ankora` closes that gap from the supply side: it replays the traces you
-already have as a deterministic regression suite, scores the outputs, and
-**exits non-zero when quality regresses** — so a GitHub Action can block the
-merge. Local-first, bring-your-own-keys, no account, no telemetry.
+  <p>
+    <a href="https://pypi.org/project/ankora/"><img src="https://img.shields.io/pypi/v/ankora" alt="PyPI Version"/></a>
+    <a href="https://pypi.org/project/ankora/"><img src="https://img.shields.io/pypi/pyversions/ankora" alt="Python Versions"/></a>
+    <a href="https://github.com/yajan011/ankora/stargazers"><img src="https://img.shields.io/github/stars/yajan011/ankora" alt="Stars Badge"/></a>
+    <a href="https://github.com/yajan011/ankora/network/members"><img src="https://img.shields.io/github/forks/yajan011/ankora" alt="Forks Badge"/></a>
+    <a href="https://github.com/yajan011/ankora/pulls"><img src="https://img.shields.io/github/issues-pr/yajan011/ankora" alt="Pull Requests Badge"/></a>
+    <a href="https://github.com/yajan011/ankora/issues"><img src="https://img.shields.io/github/issues/yajan011/ankora" alt="Issues Badge"/></a>
+    <a href="https://github.com/yajan011/ankora/graphs/contributors"><img alt="GitHub contributors" src="https://img.shields.io/github/contributors/yajan011/ankora?color=2b9348"></a>
+    <a href="https://github.com/yajan011/ankora/blob/main/LICENSE"><img src="https://img.shields.io/github/license/yajan011/ankora?color=2b9348" alt="License Badge"/></a>
+  </p>
+</div>
 
----
+## 🌟 Overview
 
-## 60-second quickstart (no API keys required)
+ankora is a local-first, CI-native regression testing tool for LLM and agent applications. It aims to solve the problem that many teams have observability but no automated tests for output quality, by converting the traces you already capture into a deterministic regression suite that replays them, scores the outputs, and exits with a non-zero status when quality drops. That single property lets a continuous integration job block a merge before a regression reaches users.
 
-Install from source with [uv](https://docs.astral.sh/uv/):
+ankora runs entirely on your own machine or CI runner, uses your own provider API keys, and sends no telemetry.
+
+## ✨ Features
+
+- 🔁 **Traces to tests** - Ingest OpenTelemetry GenAI and Langfuse trace exports into replayable regression cases, with automatic format detection.
+- 🚦 **CI gate** - `ankora gate` compares a run against a baseline and exits non-zero on regression, so a quality drop blocks the merge.
+- 🎯 **Multiple scorers** - Deterministic scorers (`exact`, `regex`, `json_schema`) plus `embedding_similarity` and `llm_judge`.
+- 🔌 **OpenAI-compatible endpoints** - Point the OpenAI provider at Gemini, OpenRouter, Groq, Together, or a local Ollama or LM Studio server via `base_url`.
+- 🔑 **Bring your own keys** - Provider keys are read from environment variables and are never stored or proxied.
+- 🖥️ **Local-first and offline** - No account, no login, no hosted service, and no telemetry.
+- 🧪 **Keyless demo** - A built-in `echo` provider runs the full loop with no API keys, for demos and CI.
+
+## 🎯 Quick Start
+
+### Prerequisites
+
+- Python 3.11 or higher
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- Git (only needed to work from source)
+
+### Installation
+
+1. **Install ankora**
+   ```bash
+   uv tool install ankora
+   # or
+   pip install ankora
+   ```
+
+2. **Scaffold a project**
+   ```bash
+   ankora init
+   ```
+   This writes an `ankora.yaml` configuration file and an `evals/` directory.
+
+3. **Configure a provider key**
+   ```bash
+   export OPENAI_API_KEY=...   # the env var named in ankora.yaml
+   ```
+
+4. **Build cases, replay, and gate**
+   ```bash
+   ankora ingest traces.json --out evals/   # convert a trace export into cases
+   ankora run                               # replay and score the suite
+   ankora baseline set <run_id>             # promote a known-good run
+   ankora gate                              # exits non-zero on regression
+   ```
+
+### Try it without any API keys
+
+If you clone the repository, you can run the fully offline demonstration. It uses the built-in `echo` provider and deterministic scorers, so it makes no network calls and needs no keys:
 
 ```bash
-git clone https://github.com/ankora/ankora
+git clone https://github.com/yajan011/ankora.git
 cd ankora
 uv sync
-```
-
-> Coming once published to PyPI: `uv tool install ankora` (or `pip install ankora`).
-
-Now run the fully offline demo — it uses the built-in deterministic `echo`
-provider and deterministic scorers, so **no network and no keys**:
-
-```bash
 bash examples/run_demo.sh
 ```
 
-You'll watch the full loop **run → baseline set → gate** and see the CI contract
-both ways: a **green gate (exit 0)** when the run matches the baseline, then a
-**red gate (exit 1)** after a Case is deliberately broken:
+The demo runs the complete loop and shows the gate passing (exit code 0) on a clean run and failing (exit code 1) after a case is deliberately broken.
 
-```
-==> 3. Gate against the baseline (clean — expect exit 0)
-No regressions — gate passed.
-    clean gate exit code: 0
-...
-==> 5. Gate again (regression — expect non-zero exit)
-1 regression(s) detected — failing the gate.
-    broken gate exit code: 1
-```
+## ⚙️ Configuration
 
-That's the whole idea: **a regression makes the command exit non-zero.**
-
----
-
-## The core loop
-
-In your own repo, the loop is four commands. Point `target.provider` at
-`openai`/`anthropic` in `ankora.yaml` for real replays (keys come from your
-env, below), or keep the keyless `echo` provider to try it out.
-
-```bash
-# 0. Scaffold ankora.yaml + an evals/ directory
-ankora init
-
-# 1. Turn an OpenTelemetry GenAI or Langfuse trace export into regression Cases
-#    (format is auto-detected; force it with --format otel|langfuse)
-ankora ingest traces.json --out evals/
-
-# 2. Replay + score the suite; saves a run under .ankora/runs/
-ankora run
-
-# 3. Promote a good run to the baseline
-ankora baseline set <run_id>
-
-# 4. The CI entrypoint: replay, diff vs baseline, exit non-zero on regression
-ankora gate
-```
-
-Inspect any two runs read-only (never fails the build):
-
-```bash
-ankora diff <baseline_run_id> <current_run_id>
-```
-
-Every command has `--help`; `--config` points at a non-default `ankora.yaml`,
-`--target provider:model` overrides the target, and `--concurrency` bounds
-parallel replays.
-
-### Configuration (`ankora.yaml`)
+Configuration lives in `ankora.yaml`:
 
 ```yaml
 version: 1
 suites: ["evals/**/*.yaml"]
 target:
-  provider: openai          # openai | anthropic | echo (keyless, for demos/CI)
+  provider: openai          # openai, anthropic, or echo (keyless, for demos and CI)
   model: gpt-4o-mini
 providers:
-  openai: {api_key_env: OPENAI_API_KEY}      # keys read from env, never inlined
+  openai: {api_key_env: OPENAI_API_KEY}   # keys are read from the environment
 scorers:
-  - type: exact             # deterministic, no key needed
+  - type: exact
     threshold: 1.0
-  - type: regex
-    pattern: '"country"'
   - type: json_schema
     schema: {type: object, required: [city, country]}
-  - type: llm_judge         # needs a provider key
+  - type: llm_judge
     judge: {provider: openai, model: gpt-4o}
     rubric: "Score 1 if factually consistent with the reference, else 0."
     threshold: 0.7
-  - type: embedding_similarity
-    model: {provider: openai, model: text-embedding-3-small}
-    threshold: 0.85
 gate:
-  fail_on: regression       # "regression" (vs baseline) or "absolute" (vs thresholds)
+  fail_on: regression       # "regression" (compared to baseline) or "absolute" (against thresholds)
   baseline: .ankora/baseline.json
 ```
 
----
-
-## OpenAI-compatible endpoints
-
-The `openai` provider can talk to any OpenAI-compatible endpoint — Google Gemini's
-OpenAI-compat API, OpenRouter, Groq, Together, or a local Ollama / LM Studio
-server — by setting `base_url` on the provider. Leave it unset to hit
-`api.openai.com` as usual. Keys are still read from the env var you name; ankora
-never sees or stores them.
-
-**Gemini (free tier)** — get a key from [Google AI Studio](https://aistudio.google.com/apikey):
+To use an OpenAI-compatible endpoint, add a `base_url` to the provider (for example Google Gemini's OpenAI-compatible API):
 
 ```yaml
-target:
-  provider: openai
-  model: gemini-2.0-flash
 providers:
   openai:
     api_key_env: GEMINI_API_KEY
     base_url: https://generativelanguage.googleapis.com/v1beta/openai/
-scorers:
-  - type: llm_judge                       # judge over the same endpoint
-    judge: {provider: openai, model: gemini-2.0-flash}
-    rubric: "Score 1 if factually consistent with the reference, else 0."
-    threshold: 0.7
-  - type: exact                           # deterministic, no model needed
-    threshold: 1.0
 ```
 
-```bash
-export GEMINI_API_KEY=...   # from Google AI Studio
-ankora run
+Note: many OpenAI-compatible endpoints serve only chat completions and not embeddings. On those, use the `llm_judge` and deterministic scorers rather than `embedding_similarity`.
+
+## 📚 Documentation
+
+- [Examples and offline demo](examples/README.md)
+- [Releasing guide](RELEASING.md)
+- [License](LICENSE)
+
+## 🏗️ Project Structure
+
+```
+ankora/
+├── src/ankora/
+│   ├── cli.py            # Typer command-line interface
+│   ├── config.py         # ankora.yaml parsing and validation
+│   ├── models.py         # Case, Run, and result data models
+│   ├── replay.py         # replay a suite against a target provider
+│   ├── diff.py           # compare a run against a baseline
+│   ├── storage.py        # read and write runs and baselines
+│   ├── suites.py         # load cases from evals/
+│   ├── ingest/           # OpenTelemetry and Langfuse trace readers
+│   ├── providers/        # openai, anthropic, echo, registry, errors
+│   └── scorers/          # exact, regex, json_schema, embedding, llm_judge
+├── tests/
+├── examples/             # offline demo, sample traces, demo config
+├── .github/
+│   ├── workflows/        # CI (ankora.yml) and PyPI publish (publish.yml)
+│   └── actions/ankora-gate/
+├── pyproject.toml
+├── README.md
+├── LICENSE
+└── NOTICE
 ```
 
-**OpenRouter** — one key, hundreds of models ([openrouter.ai](https://openrouter.ai/)):
+## 🤝 Contributing
 
-```yaml
-target:
-  provider: openai
-  model: openai/gpt-4o-mini                # any OpenRouter model slug
-providers:
-  openai:
-    api_key_env: OPENROUTER_API_KEY
-    base_url: https://openrouter.ai/api/v1
-```
+Contributions are welcome. Please open an issue to report a bug or propose a feature, or submit a pull request.
 
-> **Embeddings caveat:** many OpenAI-compatible endpoints expose only chat
-> completions, not the `/embeddings` route. On those, prefer the `llm_judge` and
-> deterministic (`exact`, `regex`, `json_schema`) scorers; use
-> `embedding_similarity` only against a provider whose endpoint actually serves
-> embeddings.
-
----
-
-## Wire it into CI
-
-Add a workflow to your repo that runs `ankora gate` on pull requests. Provider
-keys come from repo secrets — ankora reads them from the environment and
-**never sees or stores your tokens**.
-
-```yaml
-# .github/workflows/ankora.yml
-name: ankora
-on: pull_request
-jobs:
-  gate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - run: uv tool install ankora      # once published to PyPI
-      - run: ankora gate
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-```
-
-A composite action that wraps those steps ships at
-[`.github/actions/ankora-gate`](.github/actions/ankora-gate/action.yml).
-Commit `.ankora/baseline.json` (or promote a run with `ankora baseline set`)
-so CI has something to compare against.
-
----
-
-## Why it's different
-
-- **Local-first & offline.** Runs on your laptop or a CI runner. No account, no
-  login, no hosted service — and **no telemetry, ever.**
-- **Bring-your-own-keys.** Replays use *your* provider keys from env vars. We
-  never carry token cost and never see your tokens.
-- **Neutral & framework-agnostic.** Reads open formats (OpenTelemetry GenAI
-  semantic conventions first). Your suite is plain YAML checked into your repo —
-  no lock-in to a framework, provider, or storage backend.
-- **It fails your CI.** The whole point: `ankora gate` exits non-zero on
-  regression, so a quality drop blocks the merge instead of reaching users.
-
----
-
-## v1 scope — and what's next
-
-**Shipped in v1:**
-
-- `init` — scaffold `ankora.yaml` + `evals/`
-- `ingest` — OpenTelemetry GenAI **and Langfuse** traces → regression Cases (format auto-detected; override with `--format {otel,langfuse,auto}`)
-- `run` — deterministic replay + scoring, persisted runs
-- `diff` — per-case comparison of two runs
-- `gate` — replay + baseline diff + non-zero exit on regression (the CI entrypoint)
-- `baseline set` — promote a run to the baseline
-- Providers: `openai`, `anthropic`, and a keyless `echo` provider for demos/CI
-- Scorers: `exact`, `regex`, `json_schema` (deterministic), `embedding_similarity`, `llm_judge`
-
-**Coming next (not built yet — no false promises):**
-
-- A scheduled drift watch (`run` on a cron against a live endpoint)
-- Multi-step agent-trajectory record/replay with tool mocking
-
-v1 targets single-turn LLM replay; recorded tool calls are kept as reference
-data but not yet re-executed.
-
----
-
-## Development
+For local development:
 
 ```bash
 uv sync
@@ -244,13 +166,32 @@ uv run ruff check
 uv run ruff format --check
 ```
 
-## Releasing
+### Ways to Contribute
 
-Maintainers: see [RELEASING.md](RELEASING.md). Publishing to PyPI happens
-automatically when you cut a GitHub Release, via
-[Trusted Publishing](https://docs.pypi.org/trusted-publishers/) (OIDC — no API
-tokens stored in the repo).
+- 🐛 Report bugs
+- 💡 Suggest new features
+- 📝 Improve documentation
+- 🔧 Submit pull requests
 
-## License
+## 📊 Roadmap
 
-Apache-2.0 — see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+- [x] Ingest OpenTelemetry GenAI and Langfuse traces
+- [x] Deterministic, embedding-similarity, and LLM-judge scorers
+- [x] CI gate with baseline comparison
+- [x] OpenAI-compatible endpoints via `base_url`
+- [ ] Scheduled drift watch (run on a cron schedule against a live endpoint)
+- [ ] Multi-step agent-trajectory record and replay with tool mocking
+
+See the [open issues](https://github.com/yajan011/ankora/issues) for a full list of proposed features and known issues.
+
+## 🏆 Contributors
+
+Thanks goes to these wonderful people ([emoji key](https://allcontributors.org/docs/en/emoji-key)):
+
+<!-- ALL-CONTRIBUTORS-LIST:START -->
+<!-- ALL-CONTRIBUTORS-LIST:END -->
+
+## 📄 License
+
+This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) and [NOTICE](NOTICE) files for details.
+
