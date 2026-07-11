@@ -10,11 +10,6 @@
   <p>
     <a href="https://pypi.org/project/ankora/"><img src="https://img.shields.io/pypi/v/ankora" alt="PyPI Version"/></a>
     <a href="https://pypi.org/project/ankora/"><img src="https://img.shields.io/pypi/pyversions/ankora" alt="Python Versions"/></a>
-    <a href="https://github.com/yajan011/ankora/stargazers"><img src="https://img.shields.io/github/stars/yajan011/ankora" alt="Stars Badge"/></a>
-    <a href="https://github.com/yajan011/ankora/network/members"><img src="https://img.shields.io/github/forks/yajan011/ankora" alt="Forks Badge"/></a>
-    <a href="https://github.com/yajan011/ankora/pulls"><img src="https://img.shields.io/github/issues-pr/yajan011/ankora" alt="Pull Requests Badge"/></a>
-    <a href="https://github.com/yajan011/ankora/issues"><img src="https://img.shields.io/github/issues/yajan011/ankora" alt="Issues Badge"/></a>
-    <a href="https://github.com/yajan011/ankora/graphs/contributors"><img alt="GitHub contributors" src="https://img.shields.io/github/contributors/yajan011/ankora?color=2b9348"></a>
     <a href="https://github.com/yajan011/ankora/blob/main/LICENSE"><img src="https://img.shields.io/github/license/yajan011/ankora?color=2b9348" alt="License Badge"/></a>
   </p>
 </div>
