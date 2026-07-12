@@ -17,6 +17,7 @@ from ankora import storage
 from ankora.cli import app
 from ankora.config import (
     Config,
+    ConfigError,
     ExactScorerConfig,
     ProviderConfig,
     TargetConfig,
@@ -59,6 +60,17 @@ def _case(case_id: str, prompt: str, reference: str) -> Case:
 # --------------------------------------------------------------------------- #
 # replay
 # --------------------------------------------------------------------------- #
+def test_replay_rejects_config_without_scorers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    config = _config().model_copy(update={"scorers": []})
+    suite = Suite(cases=[_case("a", "prompt", "ref")])
+
+    with pytest.raises(ConfigError, match="[Nn]o scorers"):
+        replay(config, suite=suite, client=_echo_client())
+
+
 def test_replay_scores_orders_and_persists(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     suite = Suite(

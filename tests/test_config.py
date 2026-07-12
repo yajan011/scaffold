@@ -97,6 +97,18 @@ def test_malformed_gate_fail_on_raises_clear_error(tmp_path: Path) -> None:
     assert "gate.fail_on" in message
 
 
+def test_empty_scorers_list_is_rejected(tmp_path: Path) -> None:
+    text = "version: 1\ntarget: {provider: echo, model: echo}\nscorers: []\n"
+    with pytest.raises(ConfigError, match="no scorers"):
+        load_config(_write(tmp_path, text))
+
+
+def test_missing_scorers_key_is_rejected(tmp_path: Path) -> None:
+    text = "version: 1\ntarget: {provider: echo, model: echo}\n"
+    with pytest.raises(ConfigError, match="no scorers"):
+        load_config(_write(tmp_path, text))
+
+
 def test_resolve_api_key_reads_env_at_call_time(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

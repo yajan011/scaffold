@@ -17,6 +17,7 @@ _JUDGE_SYSTEM = (
 
 _NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
 _LABELED_SCORE = re.compile(r"score\s*[:=]\s*(-?\d+(?:\.\d+)?)", re.IGNORECASE)
+_RATIO = re.compile(r"(-?\d+(?:\.\d+)?)\s*(?:/|out\s+of)\s*(\d+(?:\.\d+)?)", re.IGNORECASE)
 
 
 class LLMJudgeScorer:
@@ -54,10 +55,16 @@ class LLMJudgeScorer:
 
 
 def _parse_judgement(text: str) -> tuple[float, str]:
-    """Extract a 0..1 score and a short justification from possibly-messy text."""
+    """Extract a 0..1 score and a short justification from possibly-messy text.
+
+    Only unambiguous scores are accepted: an explicit 0..1 number, or an
+    "N/M" / "N out of M" ratio (taken as N/M). A bare number outside [0, 1]
+    with no denominator is treated as unparseable and scores 0.0 — it is never
+    clamped into a pass.
+    """
     text = text or ""
 
-    # 1. A JSON object carrying an explicit score.
+    # 1. A JSON object carrying an explicit 0..1 score.
     obj = _find_json_object(text)
     if isinstance(obj, dict) and "score" in obj:
         value = _to_score(obj.get("score"))
@@ -65,37 +72,39 @@ def _parse_judgement(text: str) -> tuple[float, str]:
             justification = str(obj.get("justification") or obj.get("reason") or "").strip()
             return value, justification or _summarize(text)
 
-    # 2. A labeled "score: 0.8" anywhere in the prose.
+    # 2. A labeled "score: 0.8" anywhere in the prose, if already in range.
     match = _LABELED_SCORE.search(text)
     if match:
         value = _to_score(match.group(1))
         if value is not None:
             return value, _summarize(text)
 
-    # 3. The first decimal that already looks like a 0..1 score.
+    # 3. An explicit ratio like "8/10" or "2 out of 10" -> N/M.
+    match = _RATIO.search(text)
+    if match:
+        numerator, denominator = float(match.group(1)), float(match.group(2))
+        if denominator > 0:
+            ratio = numerator / denominator
+            if 0.0 <= ratio <= 1.0:
+                return ratio, _summarize(text)
+
+    # 4. The first bare number that is already a 0..1 score.
     for token in _NUMBER.findall(text):
-        if "." in token:
-            number = float(token)
-            if 0.0 <= number <= 1.0:
-                return number, _summarize(text)
+        value = _to_score(token)
+        if value is not None:
+            return value, _summarize(text)
 
-    # 4. Fallback: the first number, clamped into range.
-    numbers = _NUMBER.findall(text)
-    if numbers:
-        return _clamp(float(numbers[0])), _summarize(text)
-
-    return 0.0, "could not parse a score from judge output"
+    # 5. Nothing unambiguous: fail closed.
+    return 0.0, f"could not parse a 0..1 score from judge output: {_summarize(text, 120)}"
 
 
 def _to_score(value: Any) -> float | None:
+    """Return ``value`` as a float if it is a number in [0, 1], else None."""
     try:
-        return _clamp(float(value))
+        number = float(value)
     except (TypeError, ValueError):
         return None
-
-
-def _clamp(value: float) -> float:
-    return max(0.0, min(1.0, value))
+    return number if 0.0 <= number <= 1.0 else None
 
 
 def _summarize(text: str, limit: int = 200) -> str:

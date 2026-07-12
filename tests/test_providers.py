@@ -15,7 +15,12 @@ from ankora.config import Config, ProviderConfig, TargetConfig
 from ankora.models import Message
 from ankora.providers.anthropic import AnthropicProvider
 from ankora.providers.base import Completion
-from ankora.providers.errors import ProviderError, ProviderRateLimitError
+from ankora.providers.errors import (
+    MAX_RETRY_DELAY,
+    ProviderError,
+    ProviderRateLimitError,
+    ProviderServerError,
+)
 from ankora.providers.openai import OpenAIProvider
 from ankora.providers.registry import get_provider
 
@@ -439,3 +444,42 @@ def test_unknown_exception_is_not_masked(monkeypatch: pytest.MonkeyPatch) -> Non
 
     with pytest.raises(ValueError, match="boom"):
         provider.complete([Message(role="user", content="hi")], {})
+
+
+def test_server_error_is_retried_then_raises_clean_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    slept: list[float] = []
+    monkeypatch.setattr("time.sleep", lambda s: slept.append(s))
+    client = _raising_openai_client(lambda: _FakeAPIError(503))
+    provider = OpenAIProvider(model="gpt-4o", client=client)
+
+    with pytest.raises(ProviderServerError, match="server error"):
+        provider.complete([Message(role="user", content="hi")], {})
+
+    assert client._state["calls"] == 3  # bounded retries, like 429
+    assert slept == [1.0, 2.0]  # exponential backoff
+
+
+def test_server_error_recovers_after_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    client = _raising_openai_client(lambda: _FakeAPIError(500), succeed_after=2)
+    provider = OpenAIProvider(model="gpt-4o", client=client)
+
+    completion = provider.complete([Message(role="user", content="hi")], {})
+
+    assert completion.text == "ok"
+    assert client._state["calls"] == 2
+
+
+def test_retry_after_sleep_is_capped(monkeypatch: pytest.MonkeyPatch) -> None:
+    slept: list[float] = []
+    monkeypatch.setattr("time.sleep", lambda s: slept.append(s))
+    client = _raising_openai_client(lambda: _FakeAPIError(429, retry_after=9999.0))
+    provider = OpenAIProvider(model="gpt-4o", client=client)
+
+    with pytest.raises(ProviderRateLimitError):
+        provider.complete([Message(role="user", content="hi")], {})
+
+    # A hostile/buggy Retry-After must not hang a CI worker.
+    assert slept == [MAX_RETRY_DELAY, MAX_RETRY_DELAY]

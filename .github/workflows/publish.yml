@@ -1,8 +1,8 @@
 name: publish
 
 # Publish ankora to PyPI when a GitHub Release is published, using PyPI
-# Trusted Publishing (OIDC). No API tokens are stored in this repository —
-# see RELEASING.md for the one-time PyPI setup.
+# Trusted Publishing (OIDC). No API tokens are stored in this repository;
+# the trust relationship is configured once in the PyPI project settings.
 
 on:
   release:

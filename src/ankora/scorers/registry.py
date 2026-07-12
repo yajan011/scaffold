@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import jsonschema
+
 from ankora.config import (
     Config,
     ConfigError,
@@ -35,7 +37,10 @@ def build_scorer(entry: Any, config: Config, client: Any | None = None) -> Score
     if isinstance(entry, RegexScorerConfig):
         return RegexScorer(pattern=entry.pattern, threshold=entry.threshold)
     if isinstance(entry, JSONSchemaScorerConfig):
-        return JSONSchemaScorer(schema=entry.json_schema, threshold=entry.threshold)
+        try:
+            return JSONSchemaScorer(schema=entry.json_schema, threshold=entry.threshold)
+        except jsonschema.exceptions.SchemaError as exc:
+            raise ConfigError(f"Invalid json_schema scorer schema: {exc.message}") from exc
     if isinstance(entry, EmbeddingSimilarityScorerConfig):
         provider = get_provider(
             entry.model.provider, config, client=client, model=entry.model.model

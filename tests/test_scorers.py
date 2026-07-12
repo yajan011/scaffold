@@ -9,8 +9,11 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
+
 from ankora.config import (
     Config,
+    ConfigError,
     EmbeddingSimilarityScorerConfig,
     ExactScorerConfig,
     JSONSchemaScorerConfig,
@@ -27,7 +30,7 @@ from ankora.scorers.exact import ExactScorer
 from ankora.scorers.json_schema import JSONSchemaScorer
 from ankora.scorers.llm_judge import LLMJudgeScorer, _parse_judgement
 from ankora.scorers.regex import RegexScorer
-from ankora.scorers.registry import build_scorers
+from ankora.scorers.registry import build_scorer, build_scorers
 
 
 def _case(reference: str) -> Case:
@@ -95,8 +98,33 @@ def test_json_schema_valid_passes() -> None:
 def test_json_schema_wrong_type_fails_with_detail() -> None:
     result = JSONSchemaScorer(schema=_SCHEMA).score(_case(""), '{"city": 5, "temp": 21}')
     assert result.score == 0.0
-    assert "expected type string" in result.detail
+    assert "is not of type 'string'" in result.detail
     assert "city" in result.detail
+
+
+def test_json_schema_spec_keywords_are_honored() -> None:
+    # Keywords the old hand-rolled validator silently ignored must now reject.
+    exclusive = JSONSchemaScorer(schema={"type": "number", "exclusiveMinimum": 5})
+    assert exclusive.score(_case(""), "5").score == 0.0
+
+    const = JSONSchemaScorer(schema={"const": "yes"})
+    assert const.score(_case(""), '"no"').score == 0.0
+
+    any_of = JSONSchemaScorer(schema={"anyOf": [{"type": "string"}, {"type": "number"}]})
+    assert any_of.score(_case(""), "{}").score == 0.0
+    assert any_of.score(_case(""), '"ok"').score == 1.0
+
+
+def test_json_schema_integer_accepts_zero_fraction_float() -> None:
+    # Per the JSON Schema spec, 2.0 is a valid "integer".
+    assert JSONSchemaScorer(schema={"type": "integer"}).score(_case(""), "2.0").score == 1.0
+    assert JSONSchemaScorer(schema={"type": "integer"}).score(_case(""), "2.5").score == 0.0
+
+
+def test_json_schema_invalid_schema_raises_config_error() -> None:
+    entry = JSONSchemaScorerConfig(type="json_schema", json_schema={"type": "not-a-type"})
+    with pytest.raises(ConfigError, match="json_schema"):
+        build_scorer(entry, _full_config())
 
 
 def test_json_schema_missing_required_fails() -> None:
@@ -204,8 +232,23 @@ def test_parse_judgement_variants() -> None:
     assert _parse_judgement("The score = 0.42 here")[0] == 0.42
     assert _parse_judgement("rating 0.65 overall")[0] == 0.65
     assert _parse_judgement("no numbers here")[0] == 0.0
-    # Out-of-range numbers are clamped.
-    assert _parse_judgement("score: 5")[0] == 1.0
+
+
+def test_parse_judgement_ratio_scales() -> None:
+    # "N/M" and "N out of M" are explicit scales and become N/M.
+    assert abs(_parse_judgement("I'd rate this 8/10, decent.")[0] - 0.8) < 1e-9
+    assert abs(_parse_judgement("Score: 2 out of 10 — mostly wrong.")[0] - 0.2) < 1e-9
+    assert abs(_parse_judgement("4 out of 5 stars")[0] - 0.8) < 1e-9
+    # A labeled in-range score wins over a stray ratio elsewhere in the text.
+    assert _parse_judgement("score: 0.9 — details: matched 3/5 criteria")[0] == 0.9
+
+
+def test_parse_judgement_bare_integer_above_one_is_never_a_pass() -> None:
+    # Regression guard: "score: 5" used to be clamped to a passing 1.0.
+    for text in ("score: 5", "Score: 7", "I give it 10", '{"score": 5}'):
+        value, detail = _parse_judgement(text)
+        assert value == 0.0, text
+        assert "could not parse" in detail, text
 
 
 # --------------------------------------------------------------------------- #

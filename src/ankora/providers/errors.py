@@ -1,10 +1,10 @@
 """Clean provider-error mapping and bounded retry for API calls.
 
 Provider SDK exceptions (openai/anthropic) are noisy and leak tracebacks. This
-module maps recognized API failures (429/401/400, connection/timeout) to a
-one-line :class:`ProviderError`, retries rate limits a couple of times with
-backoff, and re-raises anything it does not recognize (so real bugs are not
-masked). Classification is duck-typed on ``status_code`` / class name so we do
+module maps recognized API failures (429/401/400/5xx, connection/timeout) to a
+one-line :class:`ProviderError`, retries rate limits and server errors a couple
+of times with capped backoff, and re-raises anything it does not recognize (so
+real bugs are not masked). Classification is duck-typed on ``status_code`` / class name so we do
 not import the heavy SDKs here.
 """
 
@@ -18,6 +18,9 @@ T = TypeVar("T")
 
 DEFAULT_MAX_ATTEMPTS = 3
 DEFAULT_BASE_DELAY = 1.0
+# Never sleep longer than this per retry, even if the server's Retry-After
+# asks for more — a misbehaving endpoint must not hang a CI worker.
+MAX_RETRY_DELAY = 30.0
 
 
 class ProviderError(Exception):
@@ -32,6 +35,10 @@ class ProviderRateLimitError(ProviderError):
         self.retry_after = retry_after
 
 
+class ProviderServerError(ProviderError):
+    """Raised when a provider keeps returning 5xx after the retry budget."""
+
+
 def request_with_retry(
     call: Callable[[], T],
     *,
@@ -39,10 +46,11 @@ def request_with_retry(
     max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     base_delay: float = DEFAULT_BASE_DELAY,
 ) -> T:
-    """Run ``call`` with a bounded retry on 429; map other API errors cleanly.
+    """Run ``call`` with a bounded retry on 429/5xx; map other API errors cleanly.
 
-    On a rate limit, retries up to ``max_attempts`` total, sleeping for the
-    provider's ``Retry-After`` when present else exponential backoff. Recognized
+    On a rate limit or server error, retries up to ``max_attempts`` total,
+    sleeping for the provider's ``Retry-After`` when present else exponential
+    backoff — capped at :data:`MAX_RETRY_DELAY` either way. Recognized
     non-retryable API errors raise :class:`ProviderError`; unrecognized
     exceptions propagate unchanged.
     """
@@ -55,13 +63,13 @@ def request_with_retry(
             mapped = _classify(exc, provider)
             if mapped is None:
                 raise  # not a recognized provider API error — do not mask it
-            if isinstance(mapped, ProviderRateLimitError) and attempt < max_attempts:
+            retryable = isinstance(mapped, (ProviderRateLimitError, ProviderServerError))
+            if retryable and attempt < max_attempts:
+                retry_after = getattr(mapped, "retry_after", None)
                 delay = (
-                    mapped.retry_after
-                    if mapped.retry_after is not None
-                    else base_delay * (2 ** (attempt - 1))
+                    retry_after if retry_after is not None else base_delay * (2 ** (attempt - 1))
                 )
-                time.sleep(delay)
+                time.sleep(min(delay, MAX_RETRY_DELAY))
                 continue
             raise mapped from exc
 
@@ -82,6 +90,9 @@ def _classify(exc: Exception, provider: str) -> ProviderError | None:
         return ProviderError(f"Provider auth failed (401): check your API key for {provider}.")
     if status == 400 or name == "BadRequestError":
         return ProviderError(f"Provider bad request (400) for {provider}: {_short(exc)}")
+    if (isinstance(status, int) and status >= 500) or name == "InternalServerError":
+        code = status if isinstance(status, int) else 500
+        return ProviderServerError(f"Provider server error ({code}) from {provider}: {_short(exc)}")
     if isinstance(status, int):
         return ProviderError(f"Provider error ({status}) from {provider}: {_short(exc)}")
     if "Connection" in name or "Timeout" in name:

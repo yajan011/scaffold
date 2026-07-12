@@ -174,18 +174,74 @@ def test_gate_exits_zero_when_clean(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert "gate passed" in result.output.lower()
 
 
-def test_gate_exits_zero_when_no_baseline(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def _raise_no_baseline(config: Config) -> RunResult:
+    from ankora.storage import StorageError
+
+    raise StorageError("no baseline")
+
+
+def _set_fail_on_absolute(tmp_path: Path) -> None:
+    path = tmp_path / "ankora.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("fail_on: regression", "fail_on: absolute"),
+        encoding="utf-8",
+    )
+
+
+def test_gate_fails_closed_when_no_baseline_in_regression_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     _init_config(tmp_path, monkeypatch)
     current = _run("curr", [_case("A", True, 0.9)])
 
-    def _no_baseline(config: Config) -> RunResult:
-        from ankora.storage import StorageError
+    monkeypatch.setattr("ankora.cli.replay", lambda config, **kw: current)
+    monkeypatch.setattr("ankora.cli.get_baseline", _raise_no_baseline)
 
-        raise StorageError("no baseline")
+    result = runner.invoke(app, ["gate"])
+    assert result.exit_code == 1
+    assert "no baseline" in result.output.lower()
+    assert "allow-missing-baseline" in result.output
+
+
+def test_gate_allow_missing_baseline_opts_into_passing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _init_config(tmp_path, monkeypatch)
+    current = _run("curr", [_case("A", True, 0.9)])
 
     monkeypatch.setattr("ankora.cli.replay", lambda config, **kw: current)
-    monkeypatch.setattr("ankora.cli.get_baseline", _no_baseline)
+    monkeypatch.setattr("ankora.cli.get_baseline", _raise_no_baseline)
+
+    result = runner.invoke(app, ["gate", "--allow-missing-baseline"])
+    assert result.exit_code == 0
+    assert "no baseline" in result.output.lower()
+
+
+def test_gate_absolute_mode_fails_on_failing_case_without_baseline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _init_config(tmp_path, monkeypatch)
+    _set_fail_on_absolute(tmp_path)
+    current = _run("curr", [_case("A", False, 0.1), _case("B", True, 0.9)])
+
+    monkeypatch.setattr("ankora.cli.replay", lambda config, **kw: current)
+    monkeypatch.setattr("ankora.cli.get_baseline", _raise_no_baseline)
+
+    result = runner.invoke(app, ["gate"])
+    assert result.exit_code == 1
+    assert "absolute" in result.output.lower()
+
+
+def test_gate_absolute_mode_passes_without_baseline_when_all_pass(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _init_config(tmp_path, monkeypatch)
+    _set_fail_on_absolute(tmp_path)
+    current = _run("curr", [_case("A", True, 0.9)])
+
+    monkeypatch.setattr("ankora.cli.replay", lambda config, **kw: current)
+    monkeypatch.setattr("ankora.cli.get_baseline", _raise_no_baseline)
 
     result = runner.invoke(app, ["gate"])
     assert result.exit_code == 0
-    assert "no baseline" in result.output.lower()
+    assert "gate passed" in result.output.lower()

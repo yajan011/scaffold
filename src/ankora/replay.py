@@ -37,6 +37,11 @@ def replay(
 
     provider = get_provider(config.target.provider, config, client=client)
     scorers = build_scorers(config, client=client)
+    if not scorers:
+        raise ConfigError(
+            "No scorers configured — every case would pass vacuously. "
+            "Add at least one entry under `scorers:`."
+        )
 
     def _score_case(case: Case) -> CaseResult:
         completion = provider.complete(case.input.messages, case.input.params)

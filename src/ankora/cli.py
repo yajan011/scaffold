@@ -189,10 +189,18 @@ def gate(
     config_path: str = typer.Option("ankora.yaml", "--config", help="Path to ankora.yaml."),
     target: str = typer.Option(None, "--target", help="Override target as provider:model."),
     concurrency: int = typer.Option(8, "--concurrency", help="Max cases to replay in parallel."),
+    allow_missing_baseline: bool = typer.Option(
+        False,
+        "--allow-missing-baseline",
+        help="In regression mode, exit 0 instead of failing when no baseline exists yet.",
+    ),
 ) -> None:
     """Replay the suite, diff against baseline, and exit non-zero on regression.
 
-    This is the CI entrypoint.
+    This is the CI entrypoint. In ``absolute`` mode the baseline is irrelevant
+    to the verdict: any case failing its scorer thresholds fails the gate. In
+    ``regression`` mode a missing baseline fails the gate (fail closed) unless
+    ``--allow-missing-baseline`` is passed.
     """
     try:
         config = load_config(config_path)
@@ -206,11 +214,35 @@ def gate(
     try:
         baseline = get_baseline(config)
     except StorageError:
+        baseline = None
+
+    if config.gate.fail_on == "absolute":
+        # The baseline (if any) is shown for context, but the verdict depends
+        # only on the current run's threshold failures.
+        if baseline is not None:
+            _print_diff_report(diff_runs(baseline, current, config))
+        if current.summary.failed:
+            console.print(
+                f"\n[red]{current.summary.failed} case(s) failed their thresholds — "
+                "failing the gate (fail_on=absolute).[/]"
+            )
+            raise typer.Exit(code=1)
+        console.print("\n[green]All cases passed their thresholds — gate passed.[/]")
+        return
+
+    if baseline is None:
+        if allow_missing_baseline:
+            console.print(
+                "\n[yellow]No baseline yet[/] — passing because --allow-missing-baseline "
+                f"was set. Promote this run with [bold]ankora baseline set {current.run_id}[/]."
+            )
+            return
         console.print(
-            "\n[yellow]No baseline yet[/] — nothing to regress against. "
-            f"Promote this run with [bold]ankora baseline set {current.run_id}[/]."
+            "\n[red]No baseline set — failing the gate.[/] "
+            f"Run [bold]ankora baseline set {current.run_id}[/] to promote this run, "
+            "or pass [bold]--allow-missing-baseline[/] to pass without one."
         )
-        raise typer.Exit(code=0) from None
+        raise typer.Exit(code=1)
 
     report = diff_runs(baseline, current, config)
     _print_diff_report(report)

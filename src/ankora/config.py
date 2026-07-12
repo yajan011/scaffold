@@ -173,7 +173,9 @@ providers:
 scorers:
   - type: llm_judge
     judge: {provider: openai, model: gpt-4o}
-    rubric: "Score 1 if the answer is factually consistent with the reference, else 0."
+    rubric: >-
+      Score 1 if the answer is factually consistent with the reference, else 0.
+      Respond with only the number 0 or 1.
     threshold: 0.7
   - type: embedding_similarity
     model: {provider: openai, model: text-embedding-3-small}
@@ -234,6 +236,13 @@ def load_config(path: str | Path = "ankora.yaml") -> Config:
         )
 
     try:
-        return Config.model_validate(data)
+        config = Config.model_validate(data)
     except ValidationError as exc:
         raise _humanize_validation_error(exc, str(config_path)) from exc
+
+    if not config.scorers:
+        raise ConfigError(
+            f"Config file {config_path} declares no scorers — a suite that cannot fail "
+            "is invalid. Add at least one entry under `scorers:`."
+        )
+    return config

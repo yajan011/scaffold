@@ -12,6 +12,7 @@ dist/
 # tooling caches
 .pytest_cache/
 .ruff_cache/
+graphify-out/
 
 # ankora local state
 .ankora/
@@ -24,3 +25,4 @@ prompts.md
 .env
 .env.*
 .ankora/
+.DS_Store

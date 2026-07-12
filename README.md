@@ -16,14 +16,14 @@
 
 ## 🌟 Overview
 
-ankora is a local-first, CI-native regression testing tool for LLM and agent applications. It aims to solve the problem that many teams have observability but no automated tests for output quality, by converting the traces you already capture into a deterministic regression suite that replays them, scores the outputs, and exits with a non-zero status when quality drops. That single property lets a continuous integration job block a merge before a regression reaches users.
+ankora is a local-first, CI-native regression testing tool for LLM and agent applications. It aims to solve the problem that many teams have observability but no automated tests for output quality, by converting the traces you already capture into a reproducible-by-default regression suite (temperature 0, opt-in seed) that replays them, scores the outputs, and exits with a non-zero status when quality drops. That single property lets a continuous integration job block a merge before a regression reaches users.
 
 ankora runs entirely on your own machine or CI runner, uses your own provider API keys, and sends no telemetry.
 
 ## ✨ Features
 
 - 🔁 **Traces to tests** - Ingest OpenTelemetry GenAI and Langfuse trace exports into replayable regression cases, with automatic format detection.
-- 🚦 **CI gate** - `ankora gate` compares a run against a baseline and exits non-zero on regression, so a quality drop blocks the merge.
+- 🚦 **CI gate** - `ankora gate` compares a run against a baseline and exits non-zero on regression, so a quality drop blocks the merge. A missing baseline fails the gate (fail closed); pass `--allow-missing-baseline` to bootstrap.
 - 🎯 **Multiple scorers** - Deterministic scorers (`exact`, `regex`, `json_schema`) plus `embedding_similarity` and `llm_judge`.
 - 🔌 **OpenAI-compatible endpoints** - Point the OpenAI provider at Gemini, OpenRouter, Groq, Together, or a local Ollama or LM Studio server via `base_url`.
 - 🔑 **Bring your own keys** - Provider keys are read from environment variables and are never stored or proxied.
@@ -119,7 +119,6 @@ Note: many OpenAI-compatible endpoints serve only chat completions and not embed
 ## 📚 Documentation
 
 - [Examples and offline demo](examples/README.md)
-- [Releasing guide](RELEASING.md)
 - [License](LICENSE)
 
 ## 🏗️ Project Structure
